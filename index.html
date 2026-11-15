@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>トレーニングリスト</title>
+<style>
+:root{--bg:#fff;--fg:#222;--sub:#666;--line:#ddd;--card:#f6f7f9;--acc:#2563eb;--accfg:#fff;--ok:#15803d;--okbg:#e8f6ec;--danger:#c2410c;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15171a;--fg:#f0f0f0;--sub:#a0a4aa;--line:#3a3d42;--card:#1f2226;--acc:#60a5fa;--accfg:#0b1220;--ok:#6ee7a0;--okbg:#14301f;--danger:#fb923c;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#15171a;--fg:#f0f0f0;--sub:#a0a4aa;--line:#3a3d42;--card:#1f2226;--acc:#60a5fa;--accfg:#0b1220;--ok:#6ee7a0;--okbg:#14301f;--danger:#fb923c;color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:18px;line-height:1.5}
+main{max-width:560px;margin:0 auto;padding:16px}
+h1{font-size:24px;margin:0 0 12px}
+h2{font-size:18px;margin:0 0 8px}
+section{background:var(--card);border-radius:12px;padding:14px;margin-bottom:14px}
+input,textarea,button{font:inherit;color:var(--fg)}
+input,textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.row{display:flex;gap:8px;margin-top:8px}
+.row>div{flex:1}
+label{font-size:14px;color:var(--sub)}
+button{border:0;border-radius:8px;padding:12px 16px;background:var(--acc);color:var(--accfg);font-weight:700;cursor:pointer}
+button.ghost{background:transparent;color:var(--danger);padding:6px 10px;font-weight:400}
+ul{list-style:none;margin:0;padding:0}
+li{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+li input[type=checkbox]{width:28px;height:28px;flex:none}
+li .t{flex:1}
+li .t small{display:block;color:var(--sub);font-size:15px}
+li.done .t{text-decoration:line-through;color:var(--sub)}
+#prog{font-weight:700;margin-bottom:6px}
+#cheer{display:none;background:var(--okbg);color:var(--ok);padding:10px;border-radius:8px;font-weight:700;text-align:center;margin-top:8px}
+.hist{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.hist button{background:var(--bg);color:var(--fg);border:1px solid var(--line);font-weight:400;padding:8px 12px}
+.hist button.on{border-color:var(--acc);color:var(--acc);font-weight:700}
+#out{margin-top:10px;height:150px;display:none}
+.empty{color:var(--sub);font-size:15px}
+</style>
+</head>
+<body>
+<main>
+<h1>🏋️ トレーニングリスト</h1>
+
+<section>
+<label for="date">日付</label>
+<input type="date" id="date">
+</section>
+
+<section>
+<h2>種目を追加</h2>
+<input id="name" placeholder="種目名（例：スクワット）" maxlength="40">
+<div class="row">
+<div><label for="reps">回数</label><input id="reps" type="number" inputmode="numeric" min="1" placeholder="10"></div>
+<div><label for="sets">セット数</label><input id="sets" type="number" inputmode="numeric" min="1" placeholder="3"></div>
+</div>
+<div class="row"><button id="add" style="width:100%">追加</button></div>
+</section>
+
+<section>
+<h2>今日のメニュー</h2>
+<div id="prog"></div>
+<ul id="list"></ul>
+<div id="cheer">🎉 お疲れさま！</div>
+</section>
+
+<section>
+<h2>コーチのメモ</h2>
+<textarea id="memo" rows="4" placeholder="コーチに言われたことなどを書き留めましょう"></textarea>
+</section>
+
+<section>
+<h2>過去の日記</h2>
+<div class="hist" id="hist"></div>
+<button id="copy" style="width:100%">この日の記録をコピー</button>
+<textarea id="out" readonly></textarea>
+</section>
+</main>
+
+<script>
+var KEY='training-list-v1';
+var data={};
+try{var s=localStorage.getItem(KEY);if(s)data=JSON.parse(s)||{};}catch(e){data={};}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(data));}catch(e){}}
+function today(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+var $=function(i){return document.getElementById(i);};
+var cur=today();
+$('date').value=cur;
+function day(){if(!data[cur])data[cur]={items:[],memo:''};return data[cur];}
+function esc(t){return t.replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+
+function render(){
+  var d=data[cur]||{items:[],memo:''};
+  var h='';
+  d.items.forEach(function(it,i){
+    h+='<li class="'+(it.d?'done':'')+'"><input type="checkbox" data-c="'+i+'" '+(it.d?'checked':'')+'>'
+      +'<div class="t">'+esc(it.n)+'<small>'+(it.r||'-')+'回 × '+(it.s||'-')+'セット</small></div>'
+      +'<button class="ghost" data-x="'+i+'">削除</button></li>';
+  });
+  $('list').innerHTML=h||'<li class="empty">まだ種目がありません</li>';
+  var n=d.items.length,k=d.items.filter(function(x){return x.d;}).length;
+  $('prog').textContent=n?(n+'種目中 '+k+'つ完了'):'';
+  $('cheer').style.display=(n&&k===n)?'block':'none';
+  if(document.activeElement!==$('memo'))$('memo').value=d.memo||'';
+  var keys=Object.keys(data).filter(function(k){return data[k].items.length||data[k].memo;}).sort().reverse();
+  $('hist').innerHTML=keys.length?keys.map(function(k){return '<button data-d="'+k+'" class="'+(k===cur?'on':'')+'">'+k.slice(5).replace('-','/')+'</button>';}).join(''):'<span class="empty">記録するとここに日付が並びます</span>';
+}
+
+$('add').onclick=function(){
+  var n=$('name').value.trim();
+  if(!n){$('name').focus();return;}
+  day().items.push({n:n,r:$('reps').value,s:$('sets').value,d:false});
+  $('name').value='';
+  save();render();$('name').focus();
+};
+$('list').onclick=function(e){
+  var c=e.target.getAttribute('data-c'),x=e.target.getAttribute('data-x');
+  if(c!==null){day().items[+c].d=e.target.checked;save();render();}
+  if(x!==null){day().items.splice(+x,1);save();render();}
+};
+$('memo').oninput=function(){day().memo=this.value;save();};
+$('memo').onblur=render;
+$('date').onchange=function(){if(this.value){cur=this.value;$('out').style.display='none';render();}};
+$('hist').onclick=function(e){var k=e.target.getAttribute('data-d');if(k){cur=k;$('date').value=k;$('out').style.display='none';render();window.scrollTo(0,0);}};
+
+$('copy').onclick=function(){
+  var d=data[cur]||{items:[],memo:''};
+  var t='【トレーニング '+cur.replace(/-/g,'/')+'】\n';
+  d.items.forEach(function(it){t+=(it.d?'✅ ':'⬜ ')+it.n+' '+(it.r||'-')+'回×'+(it.s||'-')+'セット\n';});
+  var k=d.items.filter(function(x){return x.d;}).length;
+  if(d.items.length)t+='→ '+d.items.length+'種目中'+k+'つ完了\n';
+  if(d.memo)t+='\n【コーチのメモ】\n'+d.memo+'\n';
+  var o=$('out');o.value=t;o.style.display='block';o.select();
+  var ok=false;
+  try{ok=document.execCommand('copy');}catch(e){}
+  if(!ok&&navigator.clipboard){navigator.clipboard.writeText(t).then(function(){$('copy').textContent='コピーしました ✓';});}
+  if(ok)$('copy').textContent='コピーしました ✓';
+  setTimeout(function(){$('copy').textContent='この日の記録をコピー';},2000);
+};
+render();
+</script>
+</body>
+</html>
